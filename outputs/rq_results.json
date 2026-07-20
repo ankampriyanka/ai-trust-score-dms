@@ -1,0 +1,69 @@
+{
+  "rq1_scenario_sensitivity": {
+    "confidence_kruskal": {
+      "H_statistic": 1027.8922,
+      "p_value": 0.0,
+      "significant": true,
+      "interpretation": "KPI values differ significantly across scenarios (p<0.05) - this KPI is scenario-sensitive and captures edge-case degradation."
+    },
+    "f1_by_scenario": {
+      "occlusion": 0.8325,
+      "low_light": 0.7873,
+      "normal": 0.7909,
+      "adversarial": 0.4918,
+      "motion_blur": 0.8133,
+      "extreme_head_pose": 0.6936,
+      "glasses": 0.7792,
+      "sunglasses": 0.7895
+    }
+  },
+  "rq2_confidence_intervals": {
+    "n_samples": 1361,
+    "accuracy": 0.6128,
+    "ci_lower": 0.5866,
+    "ci_upper": 0.6383,
+    "margin_of_error": 0.0258,
+    "meets_n385_requirement": true,
+    "required_n": 385,
+    "confidence_level": 0.95
+  },
+  "rq3_discriminative_power": {
+    "n_models": 6,
+    "spearman_trust_vs_failures": {
+      "rho": 0.3714,
+      "p_value": 0.4685
+    },
+    "spearman_map_vs_failures": {
+      "rho": -0.5429,
+      "p_value": 0.2657
+    },
+    "trust_score_more_discriminative": false,
+    "verdict": "NOT SUPPORTED - mAP shows equal or stronger correlation with safety outcomes."
+  },
+  "rq4_dimension_influence": {
+    "n_records": 16,
+    "r_squared": 1.0,
+    "standardised_betas": {
+      "safety": 0.838,
+      "fairness": 0.3141,
+      "robustness": 0.1769,
+      "privacy": 0.0611,
+      "explainability": 0.0132
+    },
+    "p_values": {
+      "safety": 0.0,
+      "fairness": 0.0,
+      "robustness": 0.0,
+      "privacy": 0.0,
+      "explainability": 0.0
+    },
+    "ranked_by_influence": [
+      "safety",
+      "fairness",
+      "robustness",
+      "privacy",
+      "explainability"
+    ],
+    "top_driver": "safety"
+  }
+}

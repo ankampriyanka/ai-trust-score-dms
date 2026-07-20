@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Screenshot (generated artefact)
+outputs/dashboard_screenshot.png
+
+# OS
+.DS_Store
+Thumbs.db

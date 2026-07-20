@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Trust Score Dashboard &mdash; DMS Evaluation</title>
+<style>
+/* ── Design tokens ─────────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+  --surface-1:      #fcfcfb;
+  --surface-page:   #f3f2ef;
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #898781;
+  --gridline:       #e1e0d9;
+  --baseline:       #c3c2b7;
+  --border:         rgba(11,11,11,0.10);
+  /* Categorical slots (validated order) */
+  --s1: #2a78d6;   /* blue     */
+  --s2: #008300;   /* green    */
+  --s3: #e87ba4;   /* magenta  */
+  --s4: #eda100;   /* yellow   */
+  --s5: #1baf7a;   /* aqua     */
+  --s6: #eb6834;   /* orange   */
+  /* Status */
+  --status-good:     #0ca30c;
+  --status-warning:  #fab219;
+  --status-serious:  #ec835a;
+  --status-critical: #d03b3b;
+  /* Sequential blue ramp */
+  --seq-100: #cde2fb;
+  --seq-300: #6da7ec;
+  --seq-450: #2a78d6;
+  --seq-600: #184f95;
+  --seq-700: #0d366b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-1:    #1a1a19;
+    --surface-page: #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --s1: #3987e5;
+    --s2: #008300;
+    --s3: #d55181;
+    --s4: #c98500;
+    --s5: #199e70;
+    --s6: #d95926;
+  }
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1:    #1a1a19;
+  --surface-page: #0d0d0d;
+  --text-primary:   #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted:     #898781;
+  --gridline:       #2c2c2a;
+  --baseline:       #383835;
+  --border:         rgba(255,255,255,0.10);
+  --s1: #3987e5;
+  --s2: #008300;
+  --s3: #d55181;
+  --s4: #c98500;
+  --s5: #199e70;
+  --s6: #d95926;
+}
+
+/* ── Reset & base ───────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--surface-page);
+  color: var(--text-primary);
+  min-height: 100vh;
+  padding: 24px 16px 48px;
+}
+
+/* ── Layout ─────────────────────────────────────────────────────── */
+.page-header {
+  max-width: 1100px; margin: 0 auto 28px;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+}
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -.3px; }
+.page-subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 3px; }
+.theme-toggle {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 12px; cursor: pointer;
+  font-size: 13px; color: var(--text-secondary);
+}
+.grid {
+  max-width: 1100px; margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 20px 16px;
+  position: relative;
+}
+.card.wide { grid-column: 1 / -1; }
+.card-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 4px; }
+.card-subtitle { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+
+/* ── Stat tiles ─────────────────────────────────────────────────── */
+.stat-row { display: flex; gap: 12px; flex-wrap: wrap; max-width: 1100px; margin: 0 auto 16px; }
+.stat-tile {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  flex: 1; min-width: 140px;
+}
+.stat-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .6px; }
+.stat-value { font-size: 32px; font-weight: 700; line-height: 1.1; margin: 6px 0 2px; }
+.stat-sub { font-size: 12px; color: var(--text-secondary); }
+.grade-pill {
+  display: inline-block; padding: 2px 10px; border-radius: 99px;
+  font-size: 13px; font-weight: 700; color: #fff;
+}
+.grade-D { background: var(--status-warning); color: #000; }
+.grade-F { background: var(--status-critical); }
+
+/* ── SVG charts ─────────────────────────────────────────────────── */
+svg { display: block; overflow: visible; }
+.axis-line { stroke: var(--baseline); stroke-width: 1; }
+.gridline { stroke: var(--gridline); stroke-width: 1; stroke-dasharray: none; }
+.tick-text { fill: var(--text-muted); font-size: 11px; font-family: inherit; }
+.chart-label { fill: var(--text-primary); font-size: 11px; font-family: inherit; font-weight: 600; }
+.dim-label { fill: var(--text-secondary); font-size: 11px; font-family: inherit; }
+
+/* ── Legend ─────────────────────────────────────────────────────── */
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+/* ── Tooltip ────────────────────────────────────────────────────── */
+#tooltip {
+  position: fixed; pointer-events: none;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px;
+  font-size: 12px; color: var(--text-primary);
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  max-width: 220px; z-index: 100;
+  opacity: 0; transition: opacity .1s;
+}
+#tooltip.show { opacity: 1; }
+#tooltip .tt-title { font-weight: 600; margin-bottom: 4px; }
+#tooltip .tt-row { display: flex; justify-content: space-between; gap: 12px; color: var(--text-secondary); }
+#tooltip .tt-val { font-weight: 600; color: var(--text-primary); }
+
+/* ── Spider ─────────────────────────────────────────────────────── */
+.spider-axis { stroke: var(--gridline); stroke-width: 1; fill: none; }
+.spider-ring  { stroke: var(--gridline); stroke-width: 1; fill: none; }
+.spider-poly  { stroke-width: 2; fill-opacity: .18; }
+.spider-dot   { r: 4; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <div class="page-title">AI Trust Score Dashboard &mdash; DMS Evaluation</div>
+    <div class="page-subtitle">N&nbsp;=&nbsp;1,361 detections &nbsp;|&nbsp; Dataset: DMS-SafetyEstimateLimit (YOLO labels) &nbsp;|&nbsp; Framework: ISO&nbsp;21448&nbsp;/&nbsp;EU AI Act</div>
+  </div>
+  <button class="theme-toggle" onclick="toggleTheme()">Toggle dark mode</button>
+</div>
+
+<!-- ── Stat tiles ── -->
+<div class="stat-row">
+  <div class="stat-tile">
+    <div class="stat-label">Model A &mdash; Trust Score</div>
+    <div class="stat-value" style="color:var(--status-critical)">39.5</div>
+    <div class="stat-sub"><span class="grade-pill grade-F">F</span> &nbsp; Unacceptable for deployment</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Model B &mdash; Trust Score</div>
+    <div class="stat-value" style="color:var(--status-warning)">40.2</div>
+    <div class="stat-sub"><span class="grade-pill grade-D">D</span> &nbsp; Substantial failures</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Sample size</div>
+    <div class="stat-value">1,361</div>
+    <div class="stat-sub">N &ge; 385 requirement met &nbsp;&#10003;</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Margin of error (95&nbsp;%&nbsp;CI)</div>
+    <div class="stat-value">2.6&nbsp;pp</div>
+    <div class="stat-sub">Acc: 61.3 % [58.7, 63.8]</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Top KPI driver (RQ4)</div>
+    <div class="stat-value" style="font-size:20px;padding-top:6px">Safety</div>
+    <div class="stat-sub">&beta; = 0.84 &nbsp;|&nbsp; R&sup2; = 1.0</div>
+  </div>
+</div>
+
+<!-- ── Grid ── -->
+<div class="grid">
+
+  <!-- Chart 1: Trust Score radar / spider -->
+  <div class="card">
+    <div class="card-title">Dimension Scores &mdash; Spider Chart</div>
+    <div class="card-subtitle">Normalised per-dimension score (0&ndash;1). AHP weights in parentheses.</div>
+    <svg id="spider-svg" viewBox="0 0 280 240" width="100%"></svg>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--s1)"></span>Model A</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--s2)"></span>Model B</div>
+    </div>
+  </div>
+
+  <!-- Chart 2: Grouped bar — dimension scores -->
+  <div class="card">
+    <div class="card-title">Dimension Score Comparison</div>
+    <div class="card-subtitle">Higher is better across all dimensions.</div>
+    <svg id="dim-bar-svg" viewBox="0 0 320 220" width="100%"></svg>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--s1)"></span>Model A</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--s2)"></span>Model B</div>
+    </div>
+  </div>
+
+  <!-- Chart 3: F1 by scenario (horizontal bar) -->
+  <div class="card">
+    <div class="card-title">RQ1 &mdash; F1 Score by Scenario (Model A)</div>
+    <div class="card-subtitle">Kruskal&ndash;Wallis H&nbsp;=&nbsp;1027.9, p&nbsp;&lt;&nbsp;0.001 &mdash; significant across scenarios.</div>
+    <svg id="scenario-svg" viewBox="0 0 320 240" width="100%"></svg>
+  </div>
+
+  <!-- Chart 4: KPI raw values grouped bar -->
+  <div class="card">
+    <div class="card-title">Raw KPI Values</div>
+    <div class="card-subtitle">Performance metrics: accuracy, precision, recall, F1, mAP.</div>
+    <svg id="perf-bar-svg" viewBox="0 0 320 220" width="100%"></svg>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--s1)"></span>Model A</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--s2)"></span>Model B</div>
+    </div>
+  </div>
+
+  <!-- Chart 5: RQ4 Beta coefficients -->
+  <div class="card">
+    <div class="card-title">RQ4 &mdash; Dimension Influence (&beta; coefficients)</div>
+    <div class="card-subtitle">Standardised OLS betas &mdash; higher = stronger driver of Trust Score.</div>
+    <svg id="beta-svg" viewBox="0 0 320 200" width="100%"></svg>
+  </div>
+
+  <!-- Chart 6: Robustness — clean vs adversarial accuracy -->
+  <div class="card">
+    <div class="card-title">Robustness &mdash; Clean vs Adversarial Accuracy</div>
+    <div class="card-subtitle">Adversarial Accuracy Drop (AAD): Model A = 0.375, Model B = 0.217.</div>
+    <svg id="rob-svg" viewBox="0 0 320 200" width="100%"></svg>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--s5)"></span>Clean</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--s6)"></span>Adversarial</div>
+    </div>
+  </div>
+
+</div><!-- /grid -->
+
+<div id="tooltip"><div class="tt-title" id="tt-title"></div><div id="tt-body"></div></div>
+
+<script>
+/* ── Data ── */
+const DATA = {
+  trustScores: { A: 39.5, B: 40.2 },
+  dimScores: {
+    dims: ['Safety\n(0.40)', 'Robustness\n(0.25)', 'Fairness\n(0.15)', 'Explainability\n(0.10)', 'Privacy\n(0.10)'],
+    shortDims: ['Safety', 'Robustness', 'Fairness', 'Expl.', 'Privacy'],
+    A: [0.1322, 0.2929, 0.869, 0.6498, 0.7377],
+    B: [0.0000, 0.4603, 0.989, 0.6498, 0.7377],
+  },
+  f1Scenario: [
+    { sc: 'Adversarial', f1: 0.492 },
+    { sc: 'Extreme HP',  f1: 0.694 },
+    { sc: 'Glasses',     f1: 0.779 },
+    { sc: 'Sunglasses',  f1: 0.790 },
+    { sc: 'Normal',      f1: 0.791 },
+    { sc: 'Low Light',   f1: 0.787 },
+    { sc: 'Motion Blur', f1: 0.813 },
+    { sc: 'Occlusion',   f1: 0.833 },
+  ],
+  perf: {
+    metrics: ['Accuracy', 'Precision', 'Recall', 'F1', 'mAP'],
+    A: [0.6128, 0.6431, 0.9072, 0.7527, 0.5359],
+    B: [0.5871, 0.6348, 0.8575, 0.7295, 0.6146],
+  },
+  betas: [
+    { dim: 'Safety',         beta: 0.838 },
+    { dim: 'Fairness',       beta: 0.314 },
+    { dim: 'Robustness',     beta: 0.177 },
+    { dim: 'Privacy',        beta: 0.061 },
+    { dim: 'Explainability', beta: 0.013 },
+  ],
+  robustness: {
+    A: { clean: 0.648, adv: 0.2734, aad: 0.375 },
+    B: { clean: 0.6075, adv: 0.3906, aad: 0.217 },
+  },
+};
+
+/* ── Tooltip helpers ── */
+const tip = document.getElementById('tooltip');
+const ttTitle = document.getElementById('tt-title');
+const ttBody  = document.getElementById('tt-body');
+function showTip(evt, title, rows) {
+  ttTitle.textContent = title;
+  ttBody.innerHTML = rows.map(([l,v]) =>
+    `<div class="tt-row"><span>${l}</span><span class="tt-val">${v}</span></div>`
+  ).join('');
+  tip.classList.add('show');
+  moveTip(evt);
+}
+function moveTip(evt) {
+  const x = evt.clientX + 14, y = evt.clientY - 10;
+  tip.style.left = Math.min(x, window.innerWidth - 240) + 'px';
+  tip.style.top  = Math.max(y, 8) + 'px';
+}
+function hideTip() { tip.classList.remove('show'); }
+document.addEventListener('mousemove', e => tip.classList.contains('show') && moveTip(e));
+
+/* ── Colour helpers ── */
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/* ── Chart 1: Spider ── */
+function drawSpider() {
+  const svg = document.getElementById('spider-svg');
+  svg.innerHTML = '';
+  const cx = 140, cy = 120, R = 90;
+  const dims = ['Safety', 'Robustness', 'Fairness', 'Expl.', 'Privacy'];
+  const weights = ['0.40', '0.25', '0.15', '0.10', '0.10'];
+  const vA = DATA.dimScores.A;
+  const vB = DATA.dimScores.B;
+  const n = dims.length;
+
+  function angle(i) { return (Math.PI * 2 * i / n) - Math.PI / 2; }
+  function pt(i, r) {
+    return [cx + r * Math.cos(angle(i)), cy + r * Math.sin(angle(i))];
+  }
+
+  // Rings
+  [0.2, 0.4, 0.6, 0.8, 1.0].forEach(t => {
+    const pts = Array.from({length: n}, (_, i) => pt(i, R * t).join(',')).join(' ');
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    poly.setAttribute('points', pts);
+    poly.setAttribute('class', 'spider-ring');
+    svg.appendChild(poly);
+    // Ring label at top
+    const [lx, ly] = pt(0, R * t);
+    const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    txt.setAttribute('x', lx + 3); txt.setAttribute('y', ly);
+    txt.setAttribute('class', 'tick-text'); txt.setAttribute('dominant-baseline', 'middle');
+    txt.textContent = t.toFixed(1);
+    svg.appendChild(txt);
+  });
+
+  // Axes
+  dims.forEach((d, i) => {
+    const [x2, y2] = pt(i, R);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', cx); line.setAttribute('y1', cy);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    line.setAttribute('class', 'spider-axis');
+    svg.appendChild(line);
+
+    // Labels
+    const [lx, ly] = pt(i, R + 18);
+    const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    txt.setAttribute('x', lx); txt.setAttribute('y', ly);
+    txt.setAttribute('class', 'dim-label');
+    txt.setAttribute('text-anchor', lx < cx - 5 ? 'end' : lx > cx + 5 ? 'start' : 'middle');
+    txt.setAttribute('dominant-baseline', 'middle');
+    txt.textContent = `${d} (${weights[i]})`;
+    svg.appendChild(txt);
+  });
+
+  // Polygons
+  [[vA, '--s1', 'Model A'], [vB, '--s2', 'Model B']].forEach(([vals, colorVar, label]) => {
+    const color = cssVar(colorVar);
+    const pts = vals.map((v, i) => pt(i, R * v).join(',')).join(' ');
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    poly.setAttribute('points', pts);
+    poly.setAttribute('class', 'spider-poly');
+    poly.setAttribute('stroke', color);
+    poly.setAttribute('fill', color);
+    svg.appendChild(poly);
+
+    vals.forEach((v, i) => {
+      const [dx, dy] = pt(i, R * v);
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', dx); dot.setAttribute('cy', dy);
+      dot.setAttribute('class', 'spider-dot');
+      dot.setAttribute('fill', color);
+      dot.setAttribute('stroke', 'var(--surface-1)');
+      dot.setAttribute('stroke-width', '2');
+      dot.style.cursor = 'pointer';
+      dot.addEventListener('mouseenter', e => showTip(e, `${label} — ${dims[i]}`, [
+        ['Score', v.toFixed(3)],
+        ['Weight', weights[i]],
+      ]));
+      dot.addEventListener('mouseleave', hideTip);
+      svg.appendChild(dot);
+    });
+  });
+}
+
+/* ── Chart 2: Grouped bar — dimensions ── */
+function drawDimBar() {
+  const svg = document.getElementById('dim-bar-svg');
+  svg.innerHTML = '';
+  const W = 320, H = 220, mL = 60, mR = 10, mT = 10, mB = 30;
+  const pW = W - mL - mR, pH = H - mT - mB;
+  const dims = DATA.dimScores.shortDims;
+  const vA = DATA.dimScores.A, vB = DATA.dimScores.B;
+  const n = dims.length;
+  const groupW = pW / n, barW = (groupW - 8) / 2;
+
+  // Gridlines
+  [0, 0.25, 0.5, 0.75, 1.0].forEach(v => {
+    const y = mT + pH * (1 - v);
+    const gl = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    gl.setAttribute('x1', mL); gl.setAttribute('y1', y);
+    gl.setAttribute('x2', mL + pW); gl.setAttribute('y2', y);
+    gl.setAttribute('class', v === 0 ? 'axis-line' : 'gridline');
+    svg.appendChild(gl);
+    if (v > 0) {
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', mL - 4); t.setAttribute('y', y);
+      t.setAttribute('class', 'tick-text');
+      t.setAttribute('text-anchor', 'end'); t.setAttribute('dominant-baseline', 'middle');
+      t.textContent = v.toFixed(2);
+      svg.appendChild(t);
+    }
+  });
+
+  dims.forEach((dim, i) => {
+    const gX = mL + i * groupW + 4;
+    [[vA[i], '--s1', 'Model A'], [vB[i], '--s2', 'Model B']].forEach(([val, cv, label], j) => {
+      const color = cssVar(cv);
+      const bH = val * pH;
+      const x = gX + j * (barW + 2);
+      const y = mT + pH - bH;
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', x); rect.setAttribute('y', y);
+      rect.setAttribute('width', barW); rect.setAttribute('height', bH);
+      rect.setAttribute('rx', 3); rect.setAttribute('fill', color);
+      rect.style.cursor = 'pointer';
+      rect.addEventListener('mouseenter', e => showTip(e, `${label} — ${dim}`, [
+        ['Score', val.toFixed(3)],
+      ]));
+      rect.addEventListener('mouseleave', hideTip);
+      svg.appendChild(rect);
+    });
+    // x-axis label
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', gX + (barW + 1));
+    t.setAttribute('y', mT + pH + 12);
+    t.setAttribute('class', 'tick-text');
+    t.setAttribute('text-anchor', 'middle');
+    t.textContent = dim;
+    svg.appendChild(t);
+  });
+
+  // Y axis
+  const ax = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  ax.setAttribute('x1', mL); ax.setAttribute('y1', mT);
+  ax.setAttribute('x2', mL); ax.setAttribute('y2', mT + pH);
+  ax.setAttribute('class', 'axis-line');
+  svg.appendChild(ax);
+}
+
+/* ── Chart 3: Horizontal bar — F1 by scenario ── */
+function drawScenario() {
+  const svg = document.getElementById('scenario-svg');
+  svg.innerHTML = '';
+  const W = 320, H = 240, mL = 88, mR = 40, mT = 12, mB = 20;
+  const pW = W - mL - mR, pH = H - mT - mB;
+  const data = [...DATA.f1Scenario].sort((a, b) => a.f1 - b.f1);
+  const n = data.length;
+  const barH = (pH / n) - 4;
+
+  // Vertical gridlines
+  [0, 0.25, 0.5, 0.75, 1.0].forEach(v => {
+    const x = mL + v * pW;
+    const gl = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    gl.setAttribute('x1', x); gl.setAttribute('y1', mT);
+    gl.setAttribute('x2', x); gl.setAttribute('y2', mT + pH);
+    gl.setAttribute('class', v === 0 ? 'axis-line' : 'gridline');
+    svg.appendChild(gl);
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', x); t.setAttribute('y', mT + pH + 12);
+    t.setAttribute('class', 'tick-text'); t.setAttribute('text-anchor', 'middle');
+    t.textContent = v.toFixed(2);
+    svg.appendChild(t);
+  });
+
+  data.forEach((d, i) => {
+    const y = mT + i * (pH / n);
+    // Colour by severity: adversarial = critical, extreme HP = serious, rest = s1
+    const color = d.f1 < 0.55 ? 'var(--status-critical)'
+                : d.f1 < 0.72 ? 'var(--status-serious)'
+                : cssVar('--s1');
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', mL); rect.setAttribute('y', y + 2);
+    rect.setAttribute('width', d.f1 * pW); rect.setAttribute('height', barH);
+    rect.setAttribute('rx', 3); rect.setAttribute('fill', color);
+    rect.style.cursor = 'pointer';
+    rect.addEventListener('mouseenter', e => showTip(e, d.sc, [['F1', d.f1.toFixed(3)]]));
+    rect.addEventListener('mouseleave', hideTip);
+    svg.appendChild(rect);
+
+    // Label left
+    const tl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    tl.setAttribute('x', mL - 4); tl.setAttribute('y', y + 2 + barH / 2);
+    tl.setAttribute('class', 'dim-label');
+    tl.setAttribute('text-anchor', 'end'); tl.setAttribute('dominant-baseline', 'middle');
+    tl.textContent = d.sc;
+    svg.appendChild(tl);
+
+    // Value right
+    const tv = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    tv.setAttribute('x', mL + d.f1 * pW + 4); tv.setAttribute('y', y + 2 + barH / 2);
+    tv.setAttribute('class', 'chart-label');
+    tv.setAttribute('dominant-baseline', 'middle');
+    tv.textContent = d.f1.toFixed(2);
+    svg.appendChild(tv);
+  });
+
+  // Baseline
+  const ax = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  ax.setAttribute('x1', mL); ax.setAttribute('y1', mT);
+  ax.setAttribute('x2', mL); ax.setAttribute('y2', mT + pH);
+  ax.setAttribute('class', 'axis-line');
+  svg.appendChild(ax);
+}
+
+/* ── Chart 4: Grouped bar — performance metrics ── */
+function drawPerfBar() {
+  const svg = document.getElementById('perf-bar-svg');
+  svg.innerHTML = '';
+  const W = 320, H = 220, mL = 50, mR = 10, mT = 10, mB = 30;
+  const pW = W - mL - mR, pH = H - mT - mB;
+  const metrics = DATA.perf.metrics;
+  const n = metrics.length;
+  const groupW = pW / n, barW = (groupW - 8) / 2;
+
+  [0, 0.25, 0.5, 0.75, 1.0].forEach(v => {
+    const y = mT + pH * (1 - v);
+    const gl = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    gl.setAttribute('x1', mL); gl.setAttribute('y1', y);
+    gl.setAttribute('x2', mL + pW); gl.setAttribute('y2', y);
+    gl.setAttribute('class', v === 0 ? 'axis-line' : 'gridline');
+    svg.appendChild(gl);
+    if (v > 0) {
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', mL - 4); t.setAttribute('y', y);
+      t.setAttribute('class', 'tick-text');
+      t.setAttribute('text-anchor', 'end'); t.setAttribute('dominant-baseline', 'middle');
+      t.textContent = v.toFixed(2);
+      svg.appendChild(t);
+    }
+  });
+
+  metrics.forEach((m, i) => {
+    const gX = mL + i * groupW + 4;
+    [[DATA.perf.A[i], '--s1', 'Model A'], [DATA.perf.B[i], '--s2', 'Model B']].forEach(([val, cv, label], j) => {
+      const color = cssVar(cv);
+      const bH = val * pH;
+      const x = gX + j * (barW + 2);
+      const y = mT + pH - bH;
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', x); rect.setAttribute('y', y);
+      rect.setAttribute('width', barW); rect.setAttribute('height', bH);
+      rect.setAttribute('rx', 3); rect.setAttribute('fill', color);
+      rect.style.cursor = 'pointer';
+      rect.addEventListener('mouseenter', e => showTip(e, `${label} — ${m}`, [['Value', val.toFixed(4)]]));
+      rect.addEventListener('mouseleave', hideTip);
+      svg.appendChild(rect);
+    });
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', gX + (barW + 1));
+    t.setAttribute('y', mT + pH + 12);
+    t.setAttribute('class', 'tick-text');
+    t.setAttribute('text-anchor', 'middle');
+    t.textContent = m;
+    svg.appendChild(t);
+  });
+
+  const ax = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  ax.setAttribute('x1', mL); ax.setAttribute('y1', mT);
+  ax.setAttribute('x2', mL); ax.setAttribute('y2', mT + pH);
+  ax.setAttribute('class', 'axis-line');
+  svg.appendChild(ax);
+}
+
+/* ── Chart 5: Horizontal bar — beta coefficients ── */
+function drawBeta() {
+  const svg = document.getElementById('beta-svg');
+  svg.innerHTML = '';
+  const W = 320, H = 200, mL = 100, mR = 50, mT = 10, mB = 20;
+  const pW = W - mL - mR, pH = H - mT - mB;
+  const data = DATA.betas;
+  const n = data.length;
+  const barH = (pH / n) - 6;
+  const maxBeta = 1.0;
+
+  // Seq blue colour by magnitude
+  const seqSteps = ['#cde2fb','#6da7ec','#3987e5','#2a78d6','#184f95'];
+
+  [0, 0.25, 0.5, 0.75, 1.0].forEach(v => {
+    const x = mL + v * pW;
+    const gl = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    gl.setAttribute('x1', x); gl.setAttribute('y1', mT);
+    gl.setAttribute('x2', x); gl.setAttribute('y2', mT + pH);
+    gl.setAttribute('class', v === 0 ? 'axis-line' : 'gridline');
+    svg.appendChild(gl);
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', x); t.setAttribute('y', mT + pH + 12);
+    t.setAttribute('class', 'tick-text'); t.setAttribute('text-anchor', 'middle');
+    t.textContent = v.toFixed(2);
+    svg.appendChild(t);
+  });
+
+  data.forEach((d, i) => {
+    const y = mT + i * (pH / n);
+    const bw = (d.beta / maxBeta) * pW;
+    const color = seqSteps[Math.min(i, seqSteps.length - 1)];
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', mL); rect.setAttribute('y', y + 3);
+    rect.setAttribute('width', bw); rect.setAttribute('height', barH);
+    rect.setAttribute('rx', 3); rect.setAttribute('fill', color);
+    rect.style.cursor = 'pointer';
+    rect.addEventListener('mouseenter', e => showTip(e, d.dim, [
+      ['Std. beta', d.beta.toFixed(4)],
+      ['p-value', '< 0.001'],
+    ]));
+    rect.addEventListener('mouseleave', hideTip);
+    svg.appendChild(rect);
+
+    const tl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    tl.setAttribute('x', mL - 4); tl.setAttribute('y', y + 3 + barH / 2);
+    tl.setAttribute('class', 'dim-label');
+    tl.setAttribute('text-anchor', 'end'); tl.setAttribute('dominant-baseline', 'middle');
+    tl.textContent = d.dim;
+    svg.appendChild(tl);
+
+    const tv = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    tv.setAttribute('x', mL + bw + 4); tv.setAttribute('y', y + 3 + barH / 2);
+    tv.setAttribute('class', 'chart-label');
+    tv.setAttribute('dominant-baseline', 'middle');
+    tv.textContent = d.beta.toFixed(3) + ' *';
+    svg.appendChild(tv);
+  });
+
+  const ax = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  ax.setAttribute('x1', mL); ax.setAttribute('y1', mT);
+  ax.setAttribute('x2', mL); ax.setAttribute('y2', mT + pH);
+  ax.setAttribute('class', 'axis-line');
+  svg.appendChild(ax);
+}
+
+/* ── Chart 6: Grouped bar — robustness ── */
+function drawRobustness() {
+  const svg = document.getElementById('rob-svg');
+  svg.innerHTML = '';
+  const W = 320, H = 200, mL = 50, mR = 10, mT = 10, mB = 30;
+  const pW = W - mL - mR, pH = H - mT - mB;
+  const models = ['Model A', 'Model B'];
+  const cleanVals = [DATA.robustness.A.clean, DATA.robustness.B.clean];
+  const advVals   = [DATA.robustness.A.adv,   DATA.robustness.B.adv];
+  const n = models.length;
+  const groupW = pW / n, barW = (groupW - 16) / 2;
+
+  [0, 0.2, 0.4, 0.6, 0.8, 1.0].forEach(v => {
+    const y = mT + pH * (1 - v);
+    const gl = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    gl.setAttribute('x1', mL); gl.setAttribute('y1', y);
+    gl.setAttribute('x2', mL + pW); gl.setAttribute('y2', y);
+    gl.setAttribute('class', v === 0 ? 'axis-line' : 'gridline');
+    svg.appendChild(gl);
+    if (v > 0) {
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', mL - 4); t.setAttribute('y', y);
+      t.setAttribute('class', 'tick-text');
+      t.setAttribute('text-anchor', 'end'); t.setAttribute('dominant-baseline', 'middle');
+      t.textContent = v.toFixed(1);
+      svg.appendChild(t);
+    }
+  });
+
+  models.forEach((m, i) => {
+    const gX = mL + i * groupW + 8;
+    [[cleanVals[i], '--s5', 'Clean'], [advVals[i], '--s6', 'Adversarial']].forEach(([val, cv, cond], j) => {
+      const color = cssVar(cv);
+      const bH = val * pH;
+      const x = gX + j * (barW + 4);
+      const y = mT + pH - bH;
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', x); rect.setAttribute('y', y);
+      rect.setAttribute('width', barW); rect.setAttribute('height', bH);
+      rect.setAttribute('rx', 3); rect.setAttribute('fill', color);
+      rect.style.cursor = 'pointer';
+      rect.addEventListener('mouseenter', e => showTip(e, `${m} — ${cond}`, [
+        ['Accuracy', val.toFixed(4)],
+        ['AAD', DATA.robustness[i === 0 ? 'A' : 'B'].aad.toFixed(3)],
+      ]));
+      rect.addEventListener('mouseleave', hideTip);
+      svg.appendChild(rect);
+
+      // Value label above bar
+      const tv = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      tv.setAttribute('x', x + barW / 2); tv.setAttribute('y', y - 3);
+      tv.setAttribute('class', 'tick-text'); tv.setAttribute('text-anchor', 'middle');
+      tv.textContent = val.toFixed(2);
+      svg.appendChild(tv);
+    });
+
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', gX + (barW + 2));
+    t.setAttribute('y', mT + pH + 14);
+    t.setAttribute('class', 'tick-text'); t.setAttribute('text-anchor', 'middle');
+    t.textContent = m;
+    svg.appendChild(t);
+  });
+
+  const ax = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  ax.setAttribute('x1', mL); ax.setAttribute('y1', mT);
+  ax.setAttribute('x2', mL); ax.setAttribute('y2', mT + pH);
+  ax.setAttribute('class', 'axis-line');
+  svg.appendChild(ax);
+}
+
+/* ── Dark mode toggle ── */
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+  // Redraw after token update
+  requestAnimationFrame(drawAll);
+}
+
+function drawAll() {
+  drawSpider();
+  drawDimBar();
+  drawScenario();
+  drawPerfBar();
+  drawBeta();
+  drawRobustness();
+}
+
+drawAll();
+</script>
+</body>
+</html>
