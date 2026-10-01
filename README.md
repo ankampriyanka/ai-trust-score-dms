@@ -1,3 +1,8 @@
+> **Repository status — legacy duplicate**
+>
+> This repository is retained for historical reference. The structured canonical doctoral research implementation is **[DBA-ai-trust-score-dms](https://github.com/ankampriyanka/DBA-ai-trust-score-dms)**. New development should happen there.
+>
+---
 # AI Trust Score Framework — Driver Monitoring Systems
 
 > A mathematically grounded, model-agnostic scorecard for evaluating the **trustworthiness** of Driver Monitoring System (DMS) computer vision models beyond accuracy alone.
